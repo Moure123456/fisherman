@@ -15,16 +15,16 @@
             position: absolute; top: 10px; left: 50%;
             transform: translateX(-50%); background: rgba(255, 255, 255, 0.95);
             padding: 6px 15px; border-radius: 20px; display: flex;
-            gap: 12px; font-size: 14px; font-weight: bold;
+            gap: 12px; font-size: 13px; font-weight: bold;
             box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 10;
         }
         canvas { display: block; width: 100vw; height: 100vh; }
         
-        /* عصا التحكم الدائرية المدمجة (Joystick) في أسفل الشاشة */
+        /* نقل عصا التحكم الدائرية إلى اليمين */
         #joystick-base {
             position: absolute;
             bottom: 30px;
-            left: 30px;
+            right: 30px;
             width: 110px;
             height: 110px;
             border-radius: 50%;
@@ -51,17 +51,21 @@
             justify-content: center;
             font-size: 18px;
         }
-        #joystick-tip {
+        #trophy-msg {
             position: absolute;
-            bottom: 155px;
-            left: 30px;
-            background: rgba(0, 0, 0, 0.6);
-            color: #fff;
-            padding: 4px 10px;
-            border-radius: 8px;
-            font-size: 11px;
-            z-index: 20;
-            pointer-events: none;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 215, 0, 0.95);
+            color: #000;
+            padding: 20px 30px;
+            border-radius: 15px;
+            font-size: 22px;
+            font-weight: bold;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+            z-index: 100;
+            display: none;
+            text-align: center;
         }
     </style>
 </head>
@@ -73,8 +77,9 @@
         <div>الحالة: <span id="status">نهار ☀️</span></div>
     </div>
 
-    <!-- عصا التحكم الدائرية المدمجة -->
-    <div id="joystick-tip">حرك الدائرة لرمي، سحب وتوجيه الخيط!</div>
+    <div id="trophy-msg">🏆 مبروك! لقد جمعت 1000 pi وحصلت على الكأس الذهبي! 🏆</div>
+
+    <!-- عصا التحكم الدائرية على اليمين -->
     <div id="joystick-base">
         <div id="joystick-stick">🎣</div>
     </div>
@@ -95,6 +100,7 @@
         let score = 0;
         let wallet = 0;
         let isNight = false;
+        let hasWonTrophy = false;
 
         const groundY = canvas.height * 0.7;
         const fishermanX = canvas.width * 0.15;
@@ -107,7 +113,7 @@
         let hookTargetY = rodTipY;
         let hookedFish = null;
 
-        // إعدادات عصا التحكم الدائرية (Joystick)
+        // عصا التحكم اليمين
         const base = document.getElementById('joystick-base');
         const stick = document.getElementById('joystick-stick');
         let joystickActive = false;
@@ -134,14 +140,12 @@
 
             stick.style.transform = `translate(${x}px, ${y}px)`;
 
-            // ترجمة حركة العصا إلى تحكم بالخيط (يمين/يسار ورمي/سحب)
-            let normX = x / maxRadius; // من -1 إلى 1
-            let normY = y / maxRadius; // من -1 إلى 1
+            let normX = x / maxRadius;
+            let normY = y / maxRadius;
 
             hookTargetX += normX * 7;
             hookTargetY += normY * 7;
 
-            // حصر نطاق الخطاف في الشاشة
             hookTargetX = Math.max(50, Math.min(canvas.width - 50, hookTargetX));
             hookTargetY = Math.max(20, Math.min(rodTipY, hookTargetY));
         }
@@ -160,7 +164,6 @@
             }
         });
 
-        // دعم الماوس للاختبار
         stick.addEventListener('mousedown', () => { joystickActive = true; updateJoystickCenter(); });
         window.addEventListener('mousemove', (e) => { if (joystickActive) handleJoystickMove(e.clientX, e.clientY); });
         window.addEventListener('mouseup', () => {
@@ -176,27 +179,35 @@
             stars.push({x: Math.random() * canvas.width, y: Math.random() * (groundY * 0.6), size: Math.random() * 2 + 1});
         }
 
-        // المراكب المتحركة في الأعلى
+        // المراكب بالأعلى
         let boats = [
-            { x: canvas.width * 0.5, speed: 0.5 },
-            { x: canvas.width * 0.2, speed: 0.7 }
+            { x: canvas.width * 0.4, speed: 0.6 },
+            { x: canvas.width * 0.7, speed: 0.4 }
         ];
 
-        // الأسماك تغطي حتى أعلى الشاشة
+        // الأعشاب البحرية الثابتة في القاع
+        const seaweeds = [];
+        for(let i=0; i<8; i++) {
+            seaweeds.push({ x: 80 + i * (canvas.width / 9), height: 40 + Math.random() * 30 });
+        }
+
+        // الأسماك والكائنات البحرية
         let fishes = [];
         const fishTypes = [
-            { name: 'حوت أبيض', val: 100, color: '#f5f5f5', size: 32, speed: 1.0 },
-            { name: 'قرش أحمر', val: 50, color: '#e53935', size: 26, speed: 1.6 },
-            { name: 'سمكة ملونة', val: 20, color: '#ffb300', size: 18, speed: 2.2 },
-            { name: 'سمكة صغيرة', val: 10, color: '#43a047', size: 13, speed: 2.8 }
+            { name: 'حوت أبيض', val: 100, color: '#f5f5f5', size: 32, speed: 1.0, type: 'fish' },
+            { name: 'قرش أحمر', val: 50, color: '#e53935', size: 26, speed: 1.5, type: 'fish' },
+            { name: 'سمكة ملونة', val: 20, color: '#ffb300', size: 18, speed: 2.0, type: 'fish' },
+            { name: 'سمكة صغيرة', val: 10, color: '#43a047', size: 13, speed: 2.5, type: 'fish' },
+            { name: 'نجم البحر', val: 15, color: '#ff7043', size: 15, speed: 0.8, type: 'star' },
+            { name: 'فرس البحر', val: 25, color: '#ab47bc', size: 16, speed: 1.0, type: 'seahorse' }
         ];
 
         function spawnFish() {
-            if(fishes.length < 6) {
+            if(fishes.length < 7) {
                 let t = fishTypes[Math.floor(Math.random() * fishTypes.length)];
                 fishes.push({
                     x: Math.random() > 0.5 ? -50 : canvas.width + 50,
-                    y: 40 + Math.random() * (groundY - 120),
+                    y: t.type === 'star' ? groundY - 25 : (40 + Math.random() * (groundY - 120)),
                     vx: (Math.random() > 0.5 ? 1 : -1) * t.speed,
                     ...t
                 });
@@ -204,18 +215,19 @@
         }
         setInterval(spawnFish, 1800);
 
+        // القرش المفترس الذي يظهر بعد 200 pi
+        let predatorShark = { x: -100, y: groundY * 0.4, vx: 2, active: false };
+
         function loop() {
-            // إذا ترك اللاعب العصا ولم تكن هناك سمكة مشبوكة بالعمق، يعود الخطاف تدريجياً للشاطئ إذا سحبه للأسفل بالكامل
             if (!joystickActive && hookTargetY >= rodTipY) {
                 hookTargetX = rodTipX;
                 hookTargetY = rodTipY;
             }
 
-            // حركة انسيابية للخطاف
             hookX += (hookTargetX - hookX) * 0.25;
             hookY += (hookTargetY - hookY) * 0.25;
 
-            // إذا عادت السمكة للشاطئ (للسلة)، يتم تسجيل النقاط
+            // عند سحب السمكة للسلة
             if (hookedFish && hookY >= rodTipY - 10) {
                 score += hookedFish.val;
                 document.getElementById('score').innerText = score;
@@ -223,13 +235,22 @@
                 hookTargetX = rodTipX;
                 hookTargetY = rodTipY;
 
+                // تحويل النقاط للمحفظة كل 200 pi وتغيير الليل والنهار تلقائياً
                 if (score >= 200) {
                     wallet += score;
                     score = 0;
                     document.getElementById('wallet').innerText = wallet;
                     document.getElementById('score').innerText = score;
-                    isNight = true;
-                    document.getElementById('status').innerText = "ليل 🌙";
+
+                    // تبديل الليل والنهار كل 200 pi
+                    isNight = !isNight;
+                    document.getElementById('status').innerText = isNight ? "ليل 🌙" : "نهار ☀️";
+                }
+
+                // فحص الفوز بالكأس عند 1000 pi في المحفظة
+                if (wallet >= 1000 && !hasWonTrophy) {
+                    hasWonTrophy = true;
+                    document.getElementById('trophy-msg').style.display = 'block';
                 }
             }
 
@@ -245,12 +266,28 @@
                 });
             }
 
+            // تفعيل القرش المفترس إذا كانت المحفظة فوق 200 pi
+            if (wallet >= 200) {
+                predatorShark.active = true;
+                predatorShark.x += predatorShark.vx;
+                if (predatorShark.x > canvas.width + 100) {
+                    predatorShark.x = -150;
+                    predatorShark.y = groundY * 0.2 + Math.random() * (groundY * 0.5);
+                }
+                // القرش يأكل الأسماك العادية التي يتقاطع معها
+                fishes.forEach((f, index) => {
+                    if (Math.hypot(predatorShark.x - f.x, predatorShark.y - f.y) < 40) {
+                        fishes.splice(index, 1); // تم أكل السمكة
+                    }
+                });
+            }
+
             boats.forEach(b => {
                 b.x += b.speed;
                 if (b.x > canvas.width + 100) b.x = -100;
             });
 
-            // 1. رسم الخلفية
+            // 1. خلفية السماء والبحر
             if(!isNight) {
                 ctx.fillStyle = '#4fc3f7'; ctx.fillRect(0, 0, canvas.width, groundY);
                 ctx.fillStyle = '#0288d1'; ctx.fillRect(0, groundY * 0.25, canvas.width, groundY * 0.75);
@@ -261,7 +298,7 @@
                 ctx.fillStyle = '#ffeb3b'; ctx.beginPath(); ctx.arc(canvas.width - 60, 50, 18, 0, Math.PI*2); ctx.fill();
             }
 
-            // 2. رسم المراكب المتحركة في الأعلى
+            // 2. رسم المراكب بالأعلى
             boats.forEach(b => {
                 ctx.fillStyle = isNight ? '#37474f' : '#6d4c41';
                 ctx.beginPath();
@@ -282,12 +319,20 @@
             ctx.fillStyle = isNight ? '#3e2723' : '#ffecb3';
             ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
 
-            // 4. الكرسي والسلة
+            // 4. الأعشاب البحرية في القاع
+            ctx.fillStyle = '#2e7d32';
+            seaweeds.forEach(sw => {
+                ctx.beginPath();
+                ctx.ellipse(sw.x, groundY - sw.height / 2, 6, sw.height / 2, 0, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // 5. الكرسي والسلة
             ctx.fillStyle = '#8d6e63'; ctx.fillRect(fishermanX + 20, groundY - 22, 22, 22);
             ctx.fillStyle = '#d7ccc8'; ctx.beginPath(); ctx.arc(fishermanX + 55, groundY - 12, 16, 0, Math.PI, false); ctx.fill();
             ctx.strokeStyle = '#4e342e'; ctx.lineWidth = 2; ctx.stroke();
 
-            // 5. رسم الصياد
+            // 6. رسم الصياد
             let fx = fishermanX, fy = groundY;
             ctx.fillStyle = '#3e2723'; ctx.fillRect(fx - 8, fy - 12, 7, 12); ctx.fillRect(fx + 3, fy - 12, 7, 12);
             ctx.fillStyle = '#1976d2'; ctx.fillRect(fx - 10, fy - 30, 22, 18);
@@ -296,7 +341,14 @@
             ctx.fillStyle = '#d32f2f'; ctx.beginPath(); ctx.arc(fx, fy - 75, 10, Math.PI, Math.PI*2); ctx.fill();
             ctx.fillRect(fx, fy - 78, 14, 3);
 
-            // 6. الصنارة والخيط والخطاف
+            // الكأس الذهبي يظهر بجوار الصياد إذا تجاوز 1000 pi
+            if (hasWonTrophy) {
+                ctx.fillStyle = '#ffd700';
+                ctx.fillRect(fx - 35, fy - 25, 16, 20);
+                ctx.beginPath(); ctx.arc(fx - 27, fy - 15, 8, Math.PI * 0.5, Math.PI * 1.5); ctx.stroke();
+            }
+
+            // 7. الصنارة والخيط والخطاف
             ctx.strokeStyle = '#333'; ctx.lineWidth = 2.5;
             ctx.beginPath(); ctx.moveTo(fx, fy - 45); ctx.lineTo(rodTipX, rodTipY); ctx.stroke();
 
@@ -306,23 +358,52 @@
             ctx.fillStyle = '#78909c';
             ctx.beginPath(); ctx.arc(hookX, hookY, 4.5, 0, Math.PI*2); ctx.fill();
 
-            // 7. تحريك ورسم الأسماك الحرة
+            // 8. رسم الأسماك والكائنات البحرية (نجم البحر، فرس البحر، إلخ)
             fishes.forEach(f => {
-                f.x += f.vx;
-                if(f.x > canvas.width + 50) f.x = -40;
-                if(f.x < -50) f.x = canvas.width + 40;
+                if (f.type === 'fish') {
+                    f.x += f.vx;
+                    if(f.x > canvas.width + 50) f.x = -40;
+                    if(f.x < -50) f.x = canvas.width + 40;
+                }
 
                 ctx.save();
                 ctx.translate(f.x, f.y);
-                if(f.vx < 0) ctx.scale(-1, 1);
-                ctx.fillStyle = f.color;
-                ctx.beginPath(); ctx.ellipse(0, 0, f.size, f.size * 0.5, 0, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.moveTo(-f.size, 0); ctx.lineTo(-f.size - 10, -7); ctx.lineTo(-f.size - 10, 7); ctx.fill();
-                ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(f.size * 0.4, -3, 2, 0, Math.PI*2); ctx.fill();
+                if(f.vx < 0 && f.type === 'fish') ctx.scale(-1, 1);
+
+                if (f.type === 'star') {
+                    // نجم البحر
+                    ctx.fillStyle = f.color;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, f.size, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (f.type === 'seahorse') {
+                    // فرس البحر
+                    ctx.fillStyle = f.color;
+                    ctx.beginPath(); ctx.ellipse(0, 0, 8, f.size, 0, 0, Math.PI*2); ctx.fill();
+                } else {
+                    // الأسماك العادية
+                    ctx.fillStyle = f.color;
+                    ctx.beginPath(); ctx.ellipse(0, 0, f.size, f.size * 0.5, 0, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(-f.size, 0); ctx.lineTo(-f.size - 10, -7); ctx.lineTo(-f.size - 10, 7); ctx.fill();
+                    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(f.size * 0.4, -3, 2, 0, Math.PI*2); ctx.fill();
+                }
                 ctx.restore();
             });
 
-            // 8. السمكة المشبوكة وهي تتملص
+            // 9. رسم القرش المفترس (إذا ظهر بعد 200 pi)
+            if (predatorShark.active) {
+                ctx.save();
+                ctx.translate(predatorShark.x, predatorShark.y);
+                ctx.fillStyle = '#37474f';
+                ctx.beginPath(); ctx.ellipse(0, 0, 45, 20, 0, 0, Math.PI * 2); ctx.fill();
+                // ذيل القرش
+                ctx.beginPath(); ctx.moveTo(-45, 0); ctx.lineTo(-65, -15); ctx.lineTo(-65, 15); ctx.fill();
+                // عين شريرة
+                ctx.fillStyle = '#ffeb3b'; ctx.beginPath(); ctx.arc(25, -5, 4, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
+            }
+
+            // 10. السمكة المشبوكة وهي تتملص
             if (hookedFish) {
                 ctx.save();
                 ctx.translate(hookedFish.x, hookedFish.y);
