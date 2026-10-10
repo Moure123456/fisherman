@@ -20,41 +20,49 @@
         }
         canvas { display: block; width: 100vw; height: 100vh; }
         
-        /* أزرار التحكم السفلية المتقدمة */
-        .control-panel {
+        /* عصا التحكم الدائرية المدمجة (Joystick) في أسفل الشاشة */
+        #joystick-base {
             position: absolute;
-            bottom: 20px;
-            width: 100%;
-            display: flex;
-            justify-content: space-between;
-            padding: 0 20px;
-            z-index: 20;
-            pointer-events: none;
-        }
-        .control-btn {
-            width: 65px;
-            height: 65px;
+            bottom: 30px;
+            left: 30px;
+            width: 110px;
+            height: 110px;
             border-radius: 50%;
-            background: rgba(255, 255, 255, 0.9);
-            border: 3px solid #333;
+            background: rgba(255, 255, 255, 0.4);
+            border: 3px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+            z-index: 20;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 13px;
-            font-weight: bold;
-            color: #333;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            pointer-events: auto;
-            cursor: pointer;
-            text-align: center;
+            touch-action: none;
         }
-        .control-btn:active { background: rgba(200, 200, 200, 0.9); transform: scale(0.95); }
-        #btn-left { border-color: #0288d1; color: #0288d1; }
-        #btn-right { border-color: #0288d1; color: #0288d1; }
-        #btn-cast { border-color: #388e3c; color: #388e3c; }
-        #btn-pull { border-color: #d32f2f; color: #d32f2f; }
-        
-        .group-btns { display: flex; gap: 10px; }
+        #joystick-stick {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid #333;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+            position: absolute;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        #joystick-tip {
+            position: absolute;
+            bottom: 155px;
+            left: 30px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 11px;
+            z-index: 20;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
@@ -65,16 +73,10 @@
         <div>الحالة: <span id="status">نهار ☀️</span></div>
     </div>
 
-    <!-- أزرار التحكم السفلي -->
-    <div class="control-panel">
-        <div class="group-btns">
-            <div id="btn-left" class="control-btn">◀️ يسار</div>
-            <div id="btn-right" class="control-btn">يمين ▶️</div>
-        </div>
-        <div class="group-btns">
-            <div id="btn-cast" class="control-btn">رمي 🎣</div>
-            <div id="btn-pull" class="control-btn">سحب ⬆️</div>
-        </div>
+    <!-- عصا التحكم الدائرية المدمجة -->
+    <div id="joystick-tip">حرك الدائرة لرمي، سحب وتوجيه الخيط!</div>
+    <div id="joystick-base">
+        <div id="joystick-stick">🎣</div>
     </div>
 
     <canvas id="canvas"></canvas>
@@ -103,12 +105,70 @@
         let hookY = rodTipY;
         let hookTargetX = rodTipX;
         let hookTargetY = rodTipY;
-        let isCasting = false;
-        let isPulling = false;
         let hookedFish = null;
 
-        let movingLeft = false;
-        let movingRight = false;
+        // إعدادات عصا التحكم الدائرية (Joystick)
+        const base = document.getElementById('joystick-base');
+        const stick = document.getElementById('joystick-stick');
+        let joystickActive = false;
+        let baseRect, centerX, centerY;
+
+        function updateJoystickCenter() {
+            baseRect = base.getBoundingClientRect();
+            centerX = baseRect.width / 2;
+            centerY = baseRect.height / 2;
+        }
+        updateJoystickCenter();
+        window.addEventListener('resize', updateJoystickCenter);
+
+        function handleJoystickMove(clientX, clientY) {
+            let x = clientX - baseRect.left - centerX;
+            let y = clientY - baseRect.top - centerY;
+            let distance = Math.hypot(x, y);
+            let maxRadius = 35;
+
+            if (distance > maxRadius) {
+                x = (x / distance) * maxRadius;
+                y = (y / distance) * maxRadius;
+            }
+
+            stick.style.transform = `translate(${x}px, ${y}px)`;
+
+            // ترجمة حركة العصا إلى تحكم بالخيط (يمين/يسار ورمي/سحب)
+            let normX = x / maxRadius; // من -1 إلى 1
+            let normY = y / maxRadius; // من -1 إلى 1
+
+            hookTargetX += normX * 7;
+            hookTargetY += normY * 7;
+
+            // حصر نطاق الخطاف في الشاشة
+            hookTargetX = Math.max(50, Math.min(canvas.width - 50, hookTargetX));
+            hookTargetY = Math.max(20, Math.min(rodTipY, hookTargetY));
+        }
+
+        stick.addEventListener('touchstart', (e) => { joystickActive = true; updateJoystickCenter(); e.preventDefault(); });
+        base.addEventListener('touchmove', (e) => {
+            if (joystickActive) {
+                handleJoystickMove(e.touches[0].clientX, e.touches[0].clientY);
+                e.preventDefault();
+            }
+        });
+        window.addEventListener('touchend', () => {
+            if (joystickActive) {
+                joystickActive = false;
+                stick.style.transform = `translate(0px, 0px)`;
+            }
+        });
+
+        // دعم الماوس للاختبار
+        stick.addEventListener('mousedown', () => { joystickActive = true; updateJoystickCenter(); });
+        window.addEventListener('mousemove', (e) => { if (joystickActive) handleJoystickMove(e.clientX, e.clientY); });
+        window.addEventListener('mouseup', () => {
+            if (joystickActive) {
+                joystickActive = false;
+                stick.style.transform = `translate(0px, 0px)`;
+            }
+        });
 
         // النجوم للوضع الليلي
         const stars = [];
@@ -144,57 +204,39 @@
         }
         setInterval(spawnFish, 1800);
 
-        const setBtnEvent = (id, onStart, onEnd) => {
-            const el = document.getElementById(id);
-            el.addEventListener('touchstart', (e) => { onStart(); e.preventDefault(); });
-            el.addEventListener('touchend', (e) => { if(onEnd) onEnd(); e.preventDefault(); });
-            el.addEventListener('mousedown', () => { onStart(); });
-            el.addEventListener('mouseup', () => { if(onEnd) onEnd(); });
-        };
-
-        setBtnEvent('btn-left', () => { movingLeft = true; }, () => { movingLeft = false; });
-        setBtnEvent('btn-right', () => { movingRight = true; }, () => { movingRight = false; });
-        setBtnEvent('btn-cast', () => { if(!hookedFish) { isCasting = true; isPulling = false; } });
-        setBtnEvent('btn-pull', () => { isPulling = true; isCasting = false; });
-
         function loop() {
-            if (movingLeft) hookTargetX -= 6;
-            if (movingRight) hookTargetX += 6;
-            hookTargetX = Math.max(50, Math.min(canvas.width - 50, hookTargetX));
-
-            if (isCasting) {
-                hookTargetY -= 12;
-                if (hookTargetY <= 20) { hookTargetY = 20; isCasting = false; }
-            } else if (isPulling) {
-                hookTargetY += 12;
-                if (hookTargetY >= rodTipY) {
-                    hookTargetY = rodTipY;
-                    hookTargetX = rodTipX;
-                    isPulling = false;
-                    if (hookedFish) {
-                        score += hookedFish.val;
-                        document.getElementById('score').innerText = score;
-                        hookedFish = null;
-
-                        if (score >= 200) {
-                            wallet += score;
-                            score = 0;
-                            document.getElementById('wallet').innerText = wallet;
-                            document.getElementById('score').innerText = score;
-                            isNight = true;
-                            document.getElementById('status').innerText = "ليل 🌙";
-                        }
-                    }
-                }
+            // إذا ترك اللاعب العصا ولم تكن هناك سمكة مشبوكة بالعمق، يعود الخطاف تدريجياً للشاطئ إذا سحبه للأسفل بالكامل
+            if (!joystickActive && hookTargetY >= rodTipY) {
+                hookTargetX = rodTipX;
+                hookTargetY = rodTipY;
             }
 
-            hookX += (hookTargetX - hookX) * 0.2;
-            hookY += (hookTargetY - hookY) * 0.2;
+            // حركة انسيابية للخطاف
+            hookX += (hookTargetX - hookX) * 0.25;
+            hookY += (hookTargetY - hookY) * 0.25;
+
+            // إذا عادت السمكة للشاطئ (للسلة)، يتم تسجيل النقاط
+            if (hookedFish && hookY >= rodTipY - 10) {
+                score += hookedFish.val;
+                document.getElementById('score').innerText = score;
+                hookedFish = null;
+                hookTargetX = rodTipX;
+                hookTargetY = rodTipY;
+
+                if (score >= 200) {
+                    wallet += score;
+                    score = 0;
+                    document.getElementById('wallet').innerText = wallet;
+                    document.getElementById('score').innerText = score;
+                    isNight = true;
+                    document.getElementById('status').innerText = "ليل 🌙";
+                }
+            }
 
             if (hookedFish) {
                 hookedFish.x = hookX + (Math.random() - 0.5) * 10;
                 hookedFish.y = hookY + (Math.random() - 0.5) * 10;
-            } else if (isCasting || isPulling || movingLeft || movingRight) {
+            } else {
                 fishes.forEach((f, index) => {
                     if (Math.hypot(hookX - f.x, hookY - f.y) < 35) {
                         hookedFish = f;
@@ -208,6 +250,7 @@
                 if (b.x > canvas.width + 100) b.x = -100;
             });
 
+            // 1. رسم الخلفية
             if(!isNight) {
                 ctx.fillStyle = '#4fc3f7'; ctx.fillRect(0, 0, canvas.width, groundY);
                 ctx.fillStyle = '#0288d1'; ctx.fillRect(0, groundY * 0.25, canvas.width, groundY * 0.75);
@@ -218,6 +261,7 @@
                 ctx.fillStyle = '#ffeb3b'; ctx.beginPath(); ctx.arc(canvas.width - 60, 50, 18, 0, Math.PI*2); ctx.fill();
             }
 
+            // 2. رسم المراكب المتحركة في الأعلى
             boats.forEach(b => {
                 ctx.fillStyle = isNight ? '#37474f' : '#6d4c41';
                 ctx.beginPath();
@@ -234,13 +278,16 @@
                 ctx.fill();
             });
 
+            // 3. الشاطئ
             ctx.fillStyle = isNight ? '#3e2723' : '#ffecb3';
             ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
 
+            // 4. الكرسي والسلة
             ctx.fillStyle = '#8d6e63'; ctx.fillRect(fishermanX + 20, groundY - 22, 22, 22);
             ctx.fillStyle = '#d7ccc8'; ctx.beginPath(); ctx.arc(fishermanX + 55, groundY - 12, 16, 0, Math.PI, false); ctx.fill();
             ctx.strokeStyle = '#4e342e'; ctx.lineWidth = 2; ctx.stroke();
 
+            // 5. رسم الصياد
             let fx = fishermanX, fy = groundY;
             ctx.fillStyle = '#3e2723'; ctx.fillRect(fx - 8, fy - 12, 7, 12); ctx.fillRect(fx + 3, fy - 12, 7, 12);
             ctx.fillStyle = '#1976d2'; ctx.fillRect(fx - 10, fy - 30, 22, 18);
@@ -249,6 +296,7 @@
             ctx.fillStyle = '#d32f2f'; ctx.beginPath(); ctx.arc(fx, fy - 75, 10, Math.PI, Math.PI*2); ctx.fill();
             ctx.fillRect(fx, fy - 78, 14, 3);
 
+            // 6. الصنارة والخيط والخطاف
             ctx.strokeStyle = '#333'; ctx.lineWidth = 2.5;
             ctx.beginPath(); ctx.moveTo(fx, fy - 45); ctx.lineTo(rodTipX, rodTipY); ctx.stroke();
 
@@ -258,6 +306,7 @@
             ctx.fillStyle = '#78909c';
             ctx.beginPath(); ctx.arc(hookX, hookY, 4.5, 0, Math.PI*2); ctx.fill();
 
+            // 7. تحريك ورسم الأسماك الحرة
             fishes.forEach(f => {
                 f.x += f.vx;
                 if(f.x > canvas.width + 50) f.x = -40;
@@ -273,6 +322,7 @@
                 ctx.restore();
             });
 
+            // 8. السمكة المشبوكة وهي تتملص
             if (hookedFish) {
                 ctx.save();
                 ctx.translate(hookedFish.x, hookedFish.y);
