@@ -15,16 +15,37 @@
             position: absolute; top: 10px; left: 50%;
             transform: translateX(-50%); background: rgba(255, 255, 255, 0.95);
             padding: 8px 20px; border-radius: 20px; display: flex;
-            gap: 20px; font-size: 16px; font-weight: bold;
+            gap: 15px; font-size: 15px; font-weight: bold;
             box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 10;
         }
-        #tip {
-            position: absolute; bottom: 10px; left: 50%;
-            transform: translateX(-50%); background: rgba(0, 0, 0, 0.7);
-            color: white; padding: 6px 15px; border-radius: 12px;
-            font-size: 13px; z-index: 10; text-align: center;
-        }
         canvas { display: block; width: 100vw; height: 100vh; }
+        
+        /* أزرار التحكم السفلية (دائرتان يمين ويسار) */
+        .control-btn {
+            position: absolute;
+            bottom: 25px;
+            width: 75px;
+            height: 75px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.85);
+            border: 4px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+            z-index: 20;
+            cursor: pointer;
+            text-align: center;
+        }
+        .control-btn:active {
+            background: rgba(200, 200, 200, 0.9);
+            transform: scale(0.95);
+        }
+        #btn-cast { left: 30px; border-color: #1976d2; color: #1976d2; }
+        #btn-pull { right: 30px; border-color: #d32f2f; color: #d32f2f; }
     </style>
 </head>
 <body>
@@ -35,7 +56,9 @@
         <div>الحالة: <span id="status">نهار ☀️</span></div>
     </div>
 
-    <div id="tip">اسحب بإصبعك لتحريك الصنارة، المس السمكة لتشبيكها ثم اسحبها للسلة!</div>
+    <!-- دائرتا التحكم -->
+    <div id="btn-cast" class="control-btn">رمي 🎣</div>
+    <div id="btn-pull" class="control-btn">سحب ⬆️</div>
 
     <canvas id="canvas"></canvas>
 
@@ -54,14 +77,19 @@
         let wallet = 0;
         let isNight = false;
 
-        // إحداثيات خطاف الصيد
-        let hookX = canvas.width * 0.4;
-        let hookY = canvas.height * 0.5;
-        let hookedFish = null; // السمكة المشبوكة
-
-        // إحداثيات الصياد والشاطئ
+        // موقع الصياد والشاطئ
         const groundY = canvas.height * 0.68;
         const fishermanX = canvas.width * 0.15;
+        const rodTipX = fishermanX + 20;
+        const rodTipY = groundY - 65;
+
+        // إحداثيات الخطاف والصنارة
+        let hookX = rodTipX;
+        let hookY = rodTipY;
+        let castProgress = 0; // 0 = عند الصياد، 1 = ملقى في البحر
+        let isCasting = false;
+        let isPulling = false;
+        let hookedFish = null; // السمكة المشبوكة في مقدمة الخيط
 
         // النجوم والقمر للوضع الليلي
         const stars = [];
@@ -72,10 +100,10 @@
         // الأسماك وأنواعها
         let fishes = [];
         const fishTypes = [
-            { name: 'حوت أبيض', val: 100, color: '#f5f5f5', size: 35, speed: 1.5 },
-            { name: 'قرش أحمر', val: 50, color: '#e53935', size: 28, speed: 2.2 },
-            { name: 'سمكة ملونة', val: 20, color: '#ffb300', size: 20, speed: 2.8 },
-            { name: 'سمكة صغيرة', val: 10, color: '#43a047', size: 14, speed: 3.5 }
+            { name: 'حوت أبيض', val: 100, color: '#f5f5f5', size: 35, speed: 1.2 },
+            { name: 'قرش أحمر', val: 50, color: '#e53935', size: 28, speed: 1.8 },
+            { name: 'سمكة ملونة', val: 20, color: '#ffb300', size: 20, speed: 2.4 },
+            { name: 'سمكة صغيرة', val: 10, color: '#43a047', size: 14, speed: 3.0 }
         ];
 
         function spawnFish() {
@@ -83,7 +111,7 @@
                 let t = fishTypes[Math.floor(Math.random() * fishTypes.length)];
                 fishes.push({
                     x: Math.random() > 0.5 ? -50 : canvas.width + 50,
-                    y: groundY * 0.15 + Math.random() * (groundY * 0.45),
+                    y: groundY * 0.2 + Math.random() * (groundY * 0.4),
                     vx: (Math.random() > 0.5 ? 1 : -1) * t.speed,
                     ...t
                 });
@@ -91,152 +119,154 @@
         }
         setInterval(spawnFish, 2000);
 
-        // التحكم باللمس للأندرويد
-        function updateTouch(x, y) {
-            hookX = x;
-            hookY = y;
+        // تفاعل أزرار الدوائر السفلية
+        const btnCast = document.getElementById('btn-cast');
+        const btnPull = document.getElementById('btn-pull');
 
-            if(!hookedFish) {
-                // محاولة تشبيك سمكة عند الاقتراب منها
-                fishes.forEach(f => {
-                    if(Math.hypot(hookX - f.x, hookY - f.y) < 45) {
-                        hookedFish = f;
-                    }
-                });
-            } else {
-                // السمكة المشبوكة تتحرك مع الإصبع مع اهتزاز المقاومة (التملص)
-                hookedFish.x = hookX + (Math.random() - 0.5) * 12;
-                hookedFish.y = hookY + (Math.random() - 0.5) * 12;
+        btnCast.addEventListener('touchstart', (e) => {
+            if (!hookedFish) {
+                isCasting = true;
+                isPulling = false;
+            }
+            e.preventDefault();
+        });
 
-                // التحقق من وصولها للسلة (بجوار الصياد)
-                let basketX = fishermanX + 50;
-                let basketY = groundY - 20;
-                if(Math.hypot(hookX - basketX, hookY - basketY) < 55) {
-                    score += hookedFish.val;
-                    document.getElementById('score').innerText = score;
+        btnPull.addEventListener('touchstart', (e) => {
+            isPulling = true;
+            isCasting = false;
+            e.preventDefault();
+        });
 
-                    // إزالة السمكة
-                    fishes = fishes.filter(f => f !== hookedFish);
-                    hookedFish = null;
+        // دعم المัลس للتجربة
+        btnCast.addEventListener('mousedown', () => { if (!hookedFish) { isCasting = true; isPulling = false; } });
+        btnPull.addEventListener('mousedown', () => { isPulling = true; isCasting = false; });
 
-                    // التحقق من 200 pi والتحويل للمحفظة والوضع الليلي
-                    if(score >= 200) {
-                        wallet += score;
-                        score = 0;
-                        document.getElementById('wallet').innerText = wallet;
+        window.addEventListener('touchend', () => { isCasting = false; });
+        window.addEventListener('mouseup', () => { isCasting = false; });
+
+        // حلقة التحديث والرسومات
+        function loop() {
+            // 1. تحريك الخطاف بناءً على الأزرار
+            if (isCasting && castProgress < 1) {
+                castProgress += 0.02;
+            } else if (isPulling && castProgress > 0) {
+                castProgress -= 0.03;
+                if (castProgress <= 0) {
+                    castProgress = 0;
+                    isPulling = false;
+                    // إذا وصلت السمكة للشاطئ (للسلة)، يتم تسجيل النقاط
+                    if (hookedFish) {
+                        score += hookedFish.val;
                         document.getElementById('score').innerText = score;
-                        isNight = true;
-                        document.getElementById('status').innerText = "ليل 🌙";
+                        hookedFish = null;
+
+                        // التحقق من نظام 200 pi والوضع الليلي
+                        if (score >= 200) {
+                            wallet += score;
+                            score = 0;
+                            document.getElementById('wallet').innerText = wallet;
+                            document.getElementById('score').innerText = score;
+                            isNight = true;
+                            document.getElementById('status').innerText = "ليل 🌙";
+                        }
                     }
                 }
             }
-        }
 
-        window.addEventListener('touchstart', (e) => { updateTouch(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }, {passive: false});
-        window.addEventListener('touchmove', (e) => { updateTouch(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }, {passive: false});
-        window.addEventListener('touchend', () => { 
-            // إذا ترك اللاعب الإصبع ولم يضعها في السلة، تفلت السمكة
-            if(hookedFish) { hookedFish = null; }
-        });
+            // حساب موقع الخطاف على الخيط
+            let targetX = canvas.width * 0.6;
+            let targetY = groundY * 0.5;
+            hookX = rodTipX + (targetX - rodTipX) * castProgress;
+            hookY = rodTipY + (targetY - rodTipY) * castProgress;
 
-        // دعم الماوس أيضاً للتجربة
-        window.addEventListener('mousemove', (e) => { updateTouch(e.clientX, e.clientY); });
+            // إذا كانت السمكة مشبوكة، تتحرك مع الخطاف وتهتز بقوة (تملص)
+            if (hookedFish) {
+                hookedFish.x = hookX + (Math.random() - 0.5) * 10;
+                hookedFish.y = hookY + (Math.random() - 0.5) * 10;
+            } else if (castProgress > 0.2) {
+                // التحقق من تشبيك السمكة في مقدمة الخيط
+                fishes.forEach((f, index) => {
+                    if (Math.hypot(hookX - f.x, hookY - f.y) < 40) {
+                        hookedFish = f;
+                        fishes.splice(index, 1); // إزالتها من الحركة العادية وربطها بالخيط
+                    }
+                });
+            }
 
-        // حلقة الرسم والتحديث
-        function loop() {
-            // خلفية البحر والسماء
+            // رسم الخلفية
             if(!isNight) {
-                ctx.fillStyle = '#4fc3f7'; // السماء
-                ctx.fillRect(0, 0, canvas.width, groundY);
-                ctx.fillStyle = '#0288d1'; // البحر
-                ctx.fillRect(0, groundY * 0.35, canvas.width, groundY * 0.65);
+                ctx.fillStyle = '#4fc3f7'; ctx.fillRect(0, 0, canvas.width, groundY);
+                ctx.fillStyle = '#0288d1'; ctx.fillRect(0, groundY * 0.35, canvas.width, groundY * 0.65);
             } else {
-                ctx.fillStyle = '#0b132b'; // السماء ليلاً
-                ctx.fillRect(0, 0, canvas.width, groundY);
-                ctx.fillStyle = '#1c2541'; // البحر ليلاً
-                ctx.fillRect(0, groundY * 0.35, canvas.width, groundY * 0.65);
-
-                // النجوم والقمر
-                ctx.fillStyle = '#fff';
-                stars.forEach(s => ctx.fillRect(s.x, s.y, s.size, s.size));
-                ctx.fillStyle = '#ffeb3b';
-                ctx.beginPath(); ctx.arc(canvas.width - 60, 60, 20, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#0b132b'; ctx.fillRect(0, 0, canvas.width, groundY);
+                ctx.fillStyle = '#1c2541'; ctx.fillRect(0, groundY * 0.35, canvas.width, groundY * 0.65);
+                ctx.fillStyle = '#fff'; stars.forEach(s => ctx.fillRect(s.x, s.y, s.size, s.size));
+                ctx.fillStyle = '#ffeb3b'; ctx.beginPath(); ctx.arc(canvas.width - 60, 60, 20, 0, Math.PI*2); ctx.fill();
             }
 
             // الشاطئ
             ctx.fillStyle = isNight ? '#3e2723' : '#ffecb3';
             ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
 
-            // المراكب في الخلفية
+            // المراكب
             ctx.fillStyle = isNight ? '#263238' : '#795548';
-            ctx.beginPath();
             let bx = canvas.width * 0.65, by = groundY - 15;
-            ctx.moveTo(bx, by); ctx.lineTo(bx + 90, by); ctx.lineTo(bx + 75, by + 20); ctx.lineTo(bx + 15, by + 20); ctx.fill();
-            ctx.fillStyle = '#fff'; // الشراع
+            ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + 90, by); ctx.lineTo(bx + 75, by + 20); ctx.lineTo(bx + 15, by + 20); ctx.fill();
+            ctx.fillStyle = '#fff';
             ctx.beginPath(); ctx.moveTo(bx + 45, by); ctx.lineTo(bx + 45, by - 35); ctx.lineTo(bx + 70, by); ctx.fill();
 
             // كرسي الصياد والسلة
-            ctx.fillStyle = '#8d6e63';
-            ctx.fillRect(fishermanX + 20, groundY - 22, 22, 22); // الكرسي
-            ctx.fillStyle = '#d7ccc8'; // السلة
-            ctx.beginPath(); ctx.arc(fishermanX + 55, groundY - 12, 16, 0, Math.PI, false); ctx.fill();
+            ctx.fillStyle = '#8d6e63'; ctx.fillRect(fishermanX + 20, groundY - 22, 22, 22);
+            ctx.fillStyle = '#d7ccc8'; ctx.beginPath(); ctx.arc(fishermanX + 55, groundY - 12, 16, 0, Math.PI, false); ctx.fill();
             ctx.strokeStyle = '#4e342e'; ctx.lineWidth = 2; ctx.stroke();
 
-            // رسم الصياد (بشكل بشري واضح جداً بملابسه المطلوبة)
+            // رسم الصياد
             let fx = fishermanX, fy = groundY;
-            // الحذاء والرجلين
-            ctx.fillStyle = '#3e2723';
-            ctx.fillRect(fx - 8, fy - 12, 7, 12);
-            ctx.fillRect(fx + 3, fy - 12, 7, 12);
-            // الشورت الأزرق
-            ctx.fillStyle = '#1976d2';
-            ctx.fillRect(fx - 10, fy - 30, 22, 18);
-            // الصديري الأخضر
-            ctx.fillStyle = '#388e3c';
-            ctx.fillRect(fx - 12, fy - 62, 26, 32);
-            // الرأس
-            ctx.fillStyle = '#ffccbc';
-            ctx.beginPath(); ctx.arc(fx, fy - 72, 10, 0, Math.PI*2); ctx.fill();
-            // الكاب الأحمر
-            ctx.fillStyle = '#d32f2f';
-            ctx.beginPath(); ctx.arc(fx, fy - 75, 10, Math.PI, Math.PI*2); ctx.fill();
-            ctx.fillRect(fx, fy - 78, 14, 3); // حافة الكاب
+            ctx.fillStyle = '#3e2723'; ctx.fillRect(fx - 8, fy - 12, 7, 12); ctx.fillRect(fx + 3, fy - 12, 7, 12);
+            ctx.fillStyle = '#1976d2'; ctx.fillRect(fx - 10, fy - 30, 22, 18);
+            ctx.fillStyle = '#388e3c'; ctx.fillRect(fx - 12, fy - 62, 26, 32);
+            ctx.fillStyle = '#ffccbc'; ctx.beginPath(); ctx.arc(fx, fy - 72, 10, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#d32f2f'; ctx.beginPath(); ctx.arc(fx, fy - 75, 10, Math.PI, Math.PI*2); ctx.fill();
+            ctx.fillRect(fx, fy - 78, 14, 3);
 
-            // صنارة الخيط
-            let rodTipX = fx + 20, rodTipY = fy - 65;
+            // الصنارة والخيط والخطاف
             ctx.strokeStyle = '#333'; ctx.lineWidth = 2.5;
             ctx.beginPath(); ctx.moveTo(fx, fy - 45); ctx.lineTo(rodTipX, rodTipY); ctx.stroke();
 
-            // الخيط المتجه للخطاف
-            ctx.strokeStyle = isNight ? '#b0bec5' : '#444'; ctx.lineWidth = 1.2;
+            ctx.strokeStyle = isNight ? '#b0bec5' : '#444'; ctx.lineWidth = 1.5;
             ctx.beginPath(); ctx.moveTo(rodTipX, rodTipY); ctx.lineTo(hookX, hookY); ctx.stroke();
             
-            // الخطاف
+            // الخطاف في مقدمة الخيط
             ctx.fillStyle = '#78909c';
-            ctx.beginPath(); ctx.arc(hookX, hookY, 4, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(hookX, hookY, 4.5, 0, Math.PI*2); ctx.fill();
 
-            // تحريك ورسم الأسماك
+            // رسم وتحريك الأسماك الحرة
             fishes.forEach(f => {
-                if(f !== hookedFish) {
-                    f.x += f.vx;
-                    if(f.x > canvas.width + 50) f.x = -40;
-                    if(f.x < -50) f.x = canvas.width + 40;
-                }
+                f.x += f.vx;
+                if(f.x > canvas.width + 50) f.x = -40;
+                if(f.x < -50) f.x = canvas.width + 40;
 
                 ctx.save();
                 ctx.translate(f.x, f.y);
                 if(f.vx < 0) ctx.scale(-1, 1);
-
-                // جسم السمكة
                 ctx.fillStyle = f.color;
                 ctx.beginPath(); ctx.ellipse(0, 0, f.size, f.size * 0.5, 0, 0, Math.PI*2); ctx.fill();
-                // الذيل
                 ctx.beginPath(); ctx.moveTo(-f.size, 0); ctx.lineTo(-f.size - 12, -8); ctx.lineTo(-f.size - 12, 8); ctx.fill();
-                // العين
                 ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(f.size * 0.4, -3, 2.5, 0, Math.PI*2); ctx.fill();
-
                 ctx.restore();
             });
+
+            // رسم السمكة المشبوكة وهي تتملص وتتهز في مقدمة الخيط
+            if (hookedFish) {
+                ctx.save();
+                ctx.translate(hookedFish.x, hookedFish.y);
+                ctx.rotate((Math.random() - 0.5) * 0.4); // اهتزاز المقاومة
+                ctx.fillStyle = hookedFish.color;
+                ctx.beginPath(); ctx.ellipse(0, 0, hookedFish.size, hookedFish.size * 0.5, 0, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(-hookedFish.size, 0); ctx.lineTo(-hookedFish.size - 12, -8); ctx.lineTo(-hookedFish.size - 12, 8); ctx.fill();
+                ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(hookedFish.size * 0.4, -3, 2.5, 0, Math.PI*2); ctx.fill();
+                ctx.restore();
+            }
 
             requestAnimationFrame(loop);
         }
