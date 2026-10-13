@@ -2,423 +2,330 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>لعبة صياد السمك الاحترافية</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لعبة صياد السمك - Pi Fisherman</title>
     <style>
-        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
-        body, html {
-            margin: 0; padding: 0; width: 100%; height: 100%;
-            overflow: hidden; font-family: 'Cairo', Arial, sans-serif;
-            background: #4fc3f7; touch-action: none;
-        }
-        #game-ui {
-            position: absolute; top: 10px; left: 50%;
-            transform: translateX(-50%); background: rgba(255, 255, 255, 0.95);
-            padding: 6px 15px; border-radius: 20px; display: flex;
-            gap: 12px; font-size: 13px; font-weight: bold;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 10;
-        }
-        canvas { display: block; width: 100vw; height: 100vh; }
-        
-        /* نقل عصا التحكم الدائرية إلى اليمين */
-        #joystick-base {
-            position: absolute;
-            bottom: 30px;
-            right: 30px;
-            width: 110px;
-            height: 110px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.4);
-            border: 3px solid rgba(255, 255, 255, 0.8);
-            box-shadow: 0 6px 15px rgba(0,0,0,0.3);
-            z-index: 20;
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body {
+            background-color: #1a1a1a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            touch-action: none;
+            min-height: 100vh;
+            overflow: hidden;
         }
-        #joystick-stick {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.9);
-            border: 2px solid #333;
-            box-shadow: 0 3px 6px rgba(0,0,0,0.3);
-            position: absolute;
+        #gameContainer {
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            background: #87CEEB;
             cursor: pointer;
+        }
+        .ui-panel {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            background: rgba(0, 0, 0, 0.65);
+            padding: 10px 25px;
+            border-radius: 30px;
+            color: #fff;
+            font-weight: bold;
+            font-size: 18px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            border: 2px solid rgba(255,255,255,0.2);
+            z-index: 10;
+        }
+        .badge {
             display: flex;
             align-items: center;
-            justify-content: center;
-            font-size: 18px;
+            gap: 8px;
         }
-        #trophy-msg {
-            position: absolute;
-            top: 40%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(255, 215, 0, 0.95);
-            color: #000;
-            padding: 20px 30px;
-            border-radius: 15px;
-            font-size: 22px;
+        .pi-icon {
+            background: #f39c12;
+            color: #fff;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
             font-weight: bold;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
-            z-index: 100;
-            display: none;
-            text-align: center;
+        }
+        .instructions {
+            position: absolute;
+            bottom: 10px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+            pointer-events: none;
         }
     </style>
 </head>
 <body>
 
-    <div id="game-ui">
-        <div>النقاط: <span id="score">0</span> pi</div>
-        <div>المحفظة: <span id="wallet">0</span> pi</div>
-        <div>الحالة: <span id="status">نهار ☀️</span></div>
+    <div id="gameContainer">
+        <div class="ui-panel">
+            <div class="badge">
+                الرصيد الحرفي: <span id="currentPi" style="color: #4cd137;">0</span> <span class="pi-icon">π</span>
+            </div>
+            <div style="border-left: 2px solid rgba(255,255,255,0.3);"></div>
+            <div class="badge">
+                المحفظة: <span id="walletPi" style="color: #fbc531;">0</span> <span class="pi-icon">π</span>
+            </div>
+        </div>
+        <canvas id="gameCanvas" width="900" height="550"></canvas>
+        <div class="instructions">اضغط أو انقر في الماء لرمي خيط السنارة واصطياد الأسماك!</div>
     </div>
-
-    <div id="trophy-msg">🏆 مبروك! لقد جمعت 1000 pi وحصلت على الكأس الذهبي! 🏆</div>
-
-    <!-- عصا التحكم الدائرية على اليمين -->
-    <div id="joystick-base">
-        <div id="joystick-stick">🎣</div>
-    </div>
-
-    <canvas id="canvas"></canvas>
 
     <script>
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
 
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resize);
-        resize();
-
-        let score = 0;
-        let wallet = 0;
+        // حالة اللعبة
+        let currentPi = 0;
+        let walletPi = 0;
         let isNight = false;
-        let hasWonTrophy = false;
 
-        const groundY = canvas.height * 0.7;
-        const fishermanX = canvas.width * 0.15;
-        const rodTipX = fishermanX + 20;
-        const rodTipY = groundY - 65;
+        // إعدادات خيط الصيد والسنارة
+        const rodTip = { x: 215, y: 200 };
+        let hook = {
+            x: rodTip.x,
+            y: rodTip.y,
+            targetX: rodTip.x,
+            targetY: rodTip.y,
+            state: 'idle', // idle, casting, reeling, caught
+            caughtFish: null,
+            speed: 5
+        };
 
-        let hookX = rodTipX;
-        let hookY = rodTipY;
-        let hookTargetX = rodTipX;
-        let hookTargetY = rodTipY;
-        let hookedFish = null;
-
-        // عصا التحكم اليمين
-        const base = document.getElementById('joystick-base');
-        const stick = document.getElementById('joystick-stick');
-        let joystickActive = false;
-        let baseRect, centerX, centerY;
-
-        function updateJoystickCenter() {
-            baseRect = base.getBoundingClientRect();
-            centerX = baseRect.width / 2;
-            centerY = baseRect.height / 2;
-        }
-        updateJoystickCenter();
-        window.addEventListener('resize', updateJoystickCenter);
-
-        function handleJoystickMove(clientX, clientY) {
-            let x = clientX - baseRect.left - centerX;
-            let y = clientY - baseRect.top - centerY;
-            let distance = Math.hypot(x, y);
-            let maxRadius = 35;
-
-            if (distance > maxRadius) {
-                x = (x / distance) * maxRadius;
-                y = (y / distance) * maxRadius;
-            }
-
-            stick.style.transform = `translate(${x}px, ${y}px)`;
-
-            let normX = x / maxRadius;
-            let normY = y / maxRadius;
-
-            hookTargetX += normX * 7;
-            hookTargetY += normY * 7;
-
-            hookTargetX = Math.max(50, Math.min(canvas.width - 50, hookTargetX));
-            hookTargetY = Math.max(20, Math.min(rodTipY, hookTargetY));
-        }
-
-        stick.addEventListener('touchstart', (e) => { joystickActive = true; updateJoystickCenter(); e.preventDefault(); });
-        base.addEventListener('touchmove', (e) => {
-            if (joystickActive) {
-                handleJoystickMove(e.touches[0].clientX, e.touches[0].clientY);
-                e.preventDefault();
-            }
-        });
-        window.addEventListener('touchend', () => {
-            if (joystickActive) {
-                joystickActive = false;
-                stick.style.transform = `translate(0px, 0px)`;
-            }
-        });
-
-        stick.addEventListener('mousedown', () => { joystickActive = true; updateJoystickCenter(); });
-        window.addEventListener('mousemove', (e) => { if (joystickActive) handleJoystickMove(e.clientX, e.clientY); });
-        window.addEventListener('mouseup', () => {
-            if (joystickActive) {
-                joystickActive = false;
-                stick.style.transform = `translate(0px, 0px)`;
-            }
-        });
+        // المراكب
+        const boats = [
+            { x: 350, y: 205, speed: 0.6, length: 70, color: '#8B4513' },
+            { x: 680, y: 190, speed: -0.4, length: 90, color: '#A0522D' }
+        ];
 
         // النجوم للوضع الليلي
         const stars = [];
-        for(let i = 0; i < 40; i++) {
-            stars.push({x: Math.random() * canvas.width, y: Math.random() * (groundY * 0.6), size: Math.random() * 2 + 1});
+        for (let i = 0; i < 60; i++) {
+            stars.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * 180,
+                radius: Math.random() * 1.5 + 0.5,
+                alpha: Math.random()
+            });
         }
 
-        // المراكب بالأعلى
-        let boats = [
-            { x: canvas.width * 0.4, speed: 0.6 },
-            { x: canvas.width * 0.7, speed: 0.4 }
+        // أنواع الأسماك
+        const FISH_TYPES = [
+            { type: 'whale', name: 'حوت أبيض', color: '#FFFFFF', size: 38, reward: 100, speed: 1.2, rarity: 0.08 },
+            { type: 'shark', name: 'قرش أحمر', color: '#E74C3C', size: 28, reward: 50, speed: 2.0, rarity: 0.22 },
+            { type: 'normal', name: 'سمكة عادية', color: '#3498DB', size: 20, reward: 20, speed: 2.5, rarity: 0.45 },
+            { type: 'small', name: 'سمكة صغيرة', color: '#F1C40F', size: 12, reward: 10, speed: 3.2, rarity: 1.00 }
         ];
 
-        // الأعشاب البحرية الثابتة في القاع
-        const seaweeds = [];
-        for(let i=0; i<8; i++) {
-            seaweeds.push({ x: 80 + i * (canvas.width / 9), height: 40 + Math.random() * 30 });
-        }
-
-        // الأسماك والكائنات البحرية
         let fishes = [];
-        const fishTypes = [
-            { name: 'حوت أبيض', val: 100, color: '#f5f5f5', size: 32, speed: 1.0, type: 'fish' },
-            { name: 'قرش أحمر', val: 50, color: '#e53935', size: 26, speed: 1.5, type: 'fish' },
-            { name: 'سمكة ملونة', val: 20, color: '#ffb300', size: 18, speed: 2.0, type: 'fish' },
-            { name: 'سمكة صغيرة', val: 10, color: '#43a047', size: 13, speed: 2.5, type: 'fish' },
-            { name: 'نجم البحر', val: 15, color: '#ff7043', size: 15, speed: 0.8, type: 'star' },
-            { name: 'فرس البحر', val: 25, color: '#ab47bc', size: 16, speed: 1.0, type: 'seahorse' }
-        ];
 
         function spawnFish() {
-            if(fishes.length < 7) {
-                let t = fishTypes[Math.floor(Math.random() * fishTypes.length)];
+            if (fishes.length < 8 && Math.random() < 0.03) {
+                const rand = Math.random();
+                let selectedType = FISH_TYPES[3];
+                for (let type of FISH_TYPES) {
+                    if (rand <= type.rarity) {
+                        selectedType = type;
+                        break;
+                    }
+                }
+
+                const dir = Math.random() < 0.5 ? 1 : -1;
                 fishes.push({
-                    x: Math.random() > 0.5 ? -50 : canvas.width + 50,
-                    y: t.type === 'star' ? groundY - 25 : (40 + Math.random() * (groundY - 120)),
-                    vx: (Math.random() > 0.5 ? 1 : -1) * t.speed,
-                    ...t
+                    ...selectedType,
+                    x: dir === 1 ? -50 : canvas.width + 50,
+                    y: 260 + Math.random() * 240,
+                    dir: dir,
+                    isHooked: false
                 });
             }
         }
-        setInterval(spawnFish, 1800);
 
-        // القرش المفترس الذي يظهر بعد 200 pi
-        let predatorShark = { x: -100, y: groundY * 0.4, vx: 2, active: false };
+        // التحكم بالنقر / اللمس
+        canvas.addEventListener("mousedown", handleInput);
+        canvas.addEventListener("touchstart", (e) => {
+            e.preventDefault();
+            handleInput(e.touches[0]);
+        });
 
-        function loop() {
-            if (!joystickActive && hookTargetY >= rodTipY) {
-                hookTargetX = rodTipX;
-                hookTargetY = rodTipY;
+        function handleInput(e) {
+            if (hook.state !== 'idle') return;
+
+            const rect = canvas.getBoundingClientRect();
+            const clickX = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const clickY = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+            // الرمي في نطاق البحر فقط
+            if (clickY > 230 && clickX > 200) {
+                hook.targetX = clickX;
+                hook.targetY = clickY;
+                hook.state = 'casting';
             }
+        }
 
-            hookX += (hookTargetX - hookX) * 0.25;
-            hookY += (hookTargetY - hookY) * 0.25;
-
-            // عند سحب السمكة للسلة
-            if (hookedFish && hookY >= rodTipY - 10) {
-                score += hookedFish.val;
-                document.getElementById('score').innerText = score;
-                hookedFish = null;
-                hookTargetX = rodTipX;
-                hookTargetY = rodTipY;
-
-                // تحويل النقاط للمحفظة كل 200 pi وتغيير الليل والنهار تلقائياً
-                if (score >= 200) {
-                    wallet += score;
-                    score = 0;
-                    document.getElementById('wallet').innerText = wallet;
-                    document.getElementById('score').innerText = score;
-
-                    // تبديل الليل والنهار كل 200 pi
-                    isNight = !isNight;
-                    document.getElementById('status').innerText = isNight ? "ليل 🌙" : "نهار ☀️";
-                }
-
-                // فحص الفوز بالكأس عند 1000 pi في المحفظة
-                if (wallet >= 1000 && !hasWonTrophy) {
-                    hasWonTrophy = true;
-                    document.getElementById('trophy-msg').style.display = 'block';
-                }
+        function addPi(amount) {
+            currentPi += amount;
+            if (currentPi >= 200) {
+                walletPi += currentPi;
+                currentPi = 0;
+                isNight = true; // تفعيل الوضع الليلي
             }
+            document.getElementById("currentPi").innerText = currentPi;
+            document.getElementById("walletPi").innerText = walletPi;
+        }
 
-            if (hookedFish) {
-                hookedFish.x = hookX + (Math.random() - 0.5) * 10;
-                hookedFish.y = hookY + (Math.random() - 0.5) * 10;
-            } else {
-                fishes.forEach((f, index) => {
-                    if (Math.hypot(hookX - f.x, hookY - f.y) < 35) {
-                        hookedFish = f;
-                        fishes.splice(index, 1);
+        // تحديث حركة العناصر
+        function update() {
+            // تحريك المراكب
+            boats.forEach(boat => {
+                boat.x += boat.speed;
+                if (boat.x > canvas.width + 100) boat.x = -100;
+                if (boat.x < -100) boat.x = canvas.width + 100;
+            });
+
+            // توليد وتحريك الأسماك
+            spawnFish();
+            fishes.forEach((fish, index) => {
+                if (!fish.isHooked) {
+                    fish.x += fish.speed * fish.dir;
+
+                    // مسافة القرب من السنارة للالتقاط
+                    if (hook.state === 'casting' || hook.state === 'reeling') {
+                        const dist = Math.hypot(fish.x - hook.x, fish.y - hook.y);
+                        if (dist < fish.size + 10) {
+                            fish.isHooked = true;
+                            hook.caughtFish = fish;
+                            hook.state = 'reeling';
+                        }
                     }
-                });
-            }
-
-            // تفعيل القرش المفترس إذا كانت المحفظة فوق 200 pi
-            if (wallet >= 200) {
-                predatorShark.active = true;
-                predatorShark.x += predatorShark.vx;
-                if (predatorShark.x > canvas.width + 100) {
-                    predatorShark.x = -150;
-                    predatorShark.y = groundY * 0.2 + Math.random() * (groundY * 0.5);
-                }
-                // القرش يأكل الأسماك العادية التي يتقاطع معها
-                fishes.forEach((f, index) => {
-                    if (Math.hypot(predatorShark.x - f.x, predatorShark.y - f.y) < 40) {
-                        fishes.splice(index, 1); // تم أكل السمكة
-                    }
-                });
-            }
-
-            boats.forEach(b => {
-                b.x += b.speed;
-                if (b.x > canvas.width + 100) b.x = -100;
-            });
-
-            // 1. خلفية السماء والبحر
-            if(!isNight) {
-                ctx.fillStyle = '#4fc3f7'; ctx.fillRect(0, 0, canvas.width, groundY);
-                ctx.fillStyle = '#0288d1'; ctx.fillRect(0, groundY * 0.25, canvas.width, groundY * 0.75);
-            } else {
-                ctx.fillStyle = '#0b132b'; ctx.fillRect(0, 0, canvas.width, groundY);
-                ctx.fillStyle = '#1c2541'; ctx.fillRect(0, groundY * 0.25, canvas.width, groundY * 0.75);
-                ctx.fillStyle = '#fff'; stars.forEach(s => ctx.fillRect(s.x, s.y, s.size, s.size));
-                ctx.fillStyle = '#ffeb3b'; ctx.beginPath(); ctx.arc(canvas.width - 60, 50, 18, 0, Math.PI*2); ctx.fill();
-            }
-
-            // 2. رسم المراكب بالأعلى
-            boats.forEach(b => {
-                ctx.fillStyle = isNight ? '#37474f' : '#6d4c41';
-                ctx.beginPath();
-                ctx.moveTo(b.x, groundY - 30);
-                ctx.lineTo(b.x + 80, groundY - 30);
-                ctx.lineTo(b.x + 65, groundY - 10);
-                ctx.lineTo(b.x + 15, groundY - 10);
-                ctx.fill();
-                ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.moveTo(b.x + 40, groundY - 30);
-                ctx.lineTo(b.x + 40, groundY - 60);
-                ctx.lineTo(b.x + 65, groundY - 35);
-                ctx.fill();
-            });
-
-            // 3. الشاطئ
-            ctx.fillStyle = isNight ? '#3e2723' : '#ffecb3';
-            ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
-
-            // 4. الأعشاب البحرية في القاع
-            ctx.fillStyle = '#2e7d32';
-            seaweeds.forEach(sw => {
-                ctx.beginPath();
-                ctx.ellipse(sw.x, groundY - sw.height / 2, 6, sw.height / 2, 0, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            // 5. الكرسي والسلة
-            ctx.fillStyle = '#8d6e63'; ctx.fillRect(fishermanX + 20, groundY - 22, 22, 22);
-            ctx.fillStyle = '#d7ccc8'; ctx.beginPath(); ctx.arc(fishermanX + 55, groundY - 12, 16, 0, Math.PI, false); ctx.fill();
-            ctx.strokeStyle = '#4e342e'; ctx.lineWidth = 2; ctx.stroke();
-
-            // 6. رسم الصياد
-            let fx = fishermanX, fy = groundY;
-            ctx.fillStyle = '#3e2723'; ctx.fillRect(fx - 8, fy - 12, 7, 12); ctx.fillRect(fx + 3, fy - 12, 7, 12);
-            ctx.fillStyle = '#1976d2'; ctx.fillRect(fx - 10, fy - 30, 22, 18);
-            ctx.fillStyle = '#388e3c'; ctx.fillRect(fx - 12, fy - 62, 26, 32);
-            ctx.fillStyle = '#ffccbc'; ctx.beginPath(); ctx.arc(fx, fy - 72, 10, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = '#d32f2f'; ctx.beginPath(); ctx.arc(fx, fy - 75, 10, Math.PI, Math.PI*2); ctx.fill();
-            ctx.fillRect(fx, fy - 78, 14, 3);
-
-            // الكأس الذهبي يظهر بجوار الصياد إذا تجاوز 1000 pi
-            if (hasWonTrophy) {
-                ctx.fillStyle = '#ffd700';
-                ctx.fillRect(fx - 35, fy - 25, 16, 20);
-                ctx.beginPath(); ctx.arc(fx - 27, fy - 15, 8, Math.PI * 0.5, Math.PI * 1.5); ctx.stroke();
-            }
-
-            // 7. الصنارة والخيط والخطاف
-            ctx.strokeStyle = '#333'; ctx.lineWidth = 2.5;
-            ctx.beginPath(); ctx.moveTo(fx, fy - 45); ctx.lineTo(rodTipX, rodTipY); ctx.stroke();
-
-            ctx.strokeStyle = isNight ? '#b0bec5' : '#333'; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.moveTo(rodTipX, rodTipY); ctx.lineTo(hookX, hookY); ctx.stroke();
-            
-            ctx.fillStyle = '#78909c';
-            ctx.beginPath(); ctx.arc(hookX, hookY, 4.5, 0, Math.PI*2); ctx.fill();
-
-            // 8. رسم الأسماك والكائنات البحرية (نجم البحر، فرس البحر، إلخ)
-            fishes.forEach(f => {
-                if (f.type === 'fish') {
-                    f.x += f.vx;
-                    if(f.x > canvas.width + 50) f.x = -40;
-                    if(f.x < -50) f.x = canvas.width + 40;
-                }
-
-                ctx.save();
-                ctx.translate(f.x, f.y);
-                if(f.vx < 0 && f.type === 'fish') ctx.scale(-1, 1);
-
-                if (f.type === 'star') {
-                    // نجم البحر
-                    ctx.fillStyle = f.color;
-                    ctx.beginPath();
-                    ctx.arc(0, 0, f.size, 0, Math.PI * 2);
-                    ctx.fill();
-                } else if (f.type === 'seahorse') {
-                    // فرس البحر
-                    ctx.fillStyle = f.color;
-                    ctx.beginPath(); ctx.ellipse(0, 0, 8, f.size, 0, 0, Math.PI*2); ctx.fill();
                 } else {
-                    // الأسماك العادية
-                    ctx.fillStyle = f.color;
-                    ctx.beginPath(); ctx.ellipse(0, 0, f.size, f.size * 0.5, 0, 0, Math.PI*2); ctx.fill();
-                    ctx.beginPath(); ctx.moveTo(-f.size, 0); ctx.lineTo(-f.size - 10, -7); ctx.lineTo(-f.size - 10, 7); ctx.fill();
-                    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(f.size * 0.4, -3, 2, 0, Math.PI*2); ctx.fill();
+                    // السمكة معلقة بالسنارة
+                    fish.x = hook.x;
+                    fish.y = hook.y + 10;
                 }
-                ctx.restore();
+
+                // حذف الأسماك الخارجة عن الشاشة
+                if ((fish.dir === 1 && fish.x > canvas.width + 100) || 
+                    (fish.dir === -1 && fish.x < -100)) {
+                    fishes.splice(index, 1);
+                }
             });
 
-            // 9. رسم القرش المفترس (إذا ظهر بعد 200 pi)
-            if (predatorShark.active) {
-                ctx.save();
-                ctx.translate(predatorShark.x, predatorShark.y);
-                ctx.fillStyle = '#37474f';
-                ctx.beginPath(); ctx.ellipse(0, 0, 45, 20, 0, 0, Math.PI * 2); ctx.fill();
-                // ذيل القرش
-                ctx.beginPath(); ctx.moveTo(-45, 0); ctx.lineTo(-65, -15); ctx.lineTo(-65, 15); ctx.fill();
-                // عين شريرة
-                ctx.fillStyle = '#ffeb3b'; ctx.beginPath(); ctx.arc(25, -5, 4, 0, Math.PI * 2); ctx.fill();
-                ctx.restore();
-            }
+            // حركة السنارة والخيط
+            if (hook.state === 'casting') {
+                const dx = hook.targetX - hook.x;
+                const dy = hook.targetY - hook.y;
+                const dist = Math.hypot(dx, dy);
 
-            // 10. السمكة المشبوكة وهي تتملص
-            if (hookedFish) {
-                ctx.save();
-                ctx.translate(hookedFish.x, hookedFish.y);
-                ctx.rotate((Math.random() - 0.5) * 0.5);
-                ctx.fillStyle = hookedFish.color;
-                ctx.beginPath(); ctx.ellipse(0, 0, hookedFish.size, hookedFish.size * 0.5, 0, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.moveTo(-hookedFish.size, 0); ctx.lineTo(-hookedFish.size - 10, -7); ctx.lineTo(-hookedFish.size - 10, 7); ctx.fill();
-                ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(hookedFish.size * 0.4, -3, 2, 0, Math.PI*2); ctx.fill();
-                ctx.restore();
-            }
+                if (dist < 5) {
+                    hook.state = 'reeling';
+                } else {
+                    hook.x += (dx / dist) * hook.speed * 1.5;
+                    hook.y += (dy / dist) * hook.speed * 1.5;
+                }
+            } else if (hook.state === 'reeling') {
+                const dx = rodTip.x - hook.x;
+                const dy = rodTip.y - hook.y;
+                const dist = Math.hypot(dx, dy);
 
-            requestAnimationFrame(loop);
+                if (dist < 10) {
+                    if (hook.caughtFish) {
+                        addPi(hook.caughtFish.reward);
+                        // حذف السمكة التي تم اصطيادها
+                        fishes = fishes.filter(f => f !== hook.caughtFish);
+                        hook.caughtFish = null;
+                    }
+                    hook.x = rodTip.x;
+                    hook.y = rodTip.y;
+                    hook.state = 'idle';
+                } else {
+                    hook.x += (dx / dist) * hook.speed * 1.8;
+                    hook.y += (dy / dist) * hook.speed * 1.8;
+                }
+            }
         }
 
-        loop();
-    </script>
-</body>
-</html>
+        // رسم عناصر اللعبة
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. السماء
+            if (isNight) {
+                ctx.fillStyle = "#0a192f";
+                ctx.fillRect(0, 0, canvas.width, 220);
+
+                // النجوم
+                stars.forEach(star => {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${Math.sin(Date.now() * 0.003 + star.x) * 0.3 + 0.7})`;
+                    ctx.beginPath();
+                    ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+
+                // القمر
+                ctx.fillStyle = "#f5f6fa";
+                ctx.beginPath();
+                ctx.arc(750, 70, 30, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                ctx.fillStyle = "#74b9ff";
+                ctx.fillRect(0, 0, canvas.width, 220);
+
+                // الشمس
+                ctx.fillStyle = "#f1c40f";
+                ctx.beginPath();
+                ctx.arc(750, 70, 35, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // 2. المراكب في الخلفية
+            boats.forEach(boat => {
+                ctx.fillStyle = boat.color;
+                ctx.beginPath();
+                ctx.moveTo(boat.x, boat.y);
+                ctx.lineTo(boat.x + boat.length, boat.y);
+                ctx.lineTo(boat.x + boat.length - 15, boat.y + 18);
+                ctx.lineTo(boat.x + 15, boat.y + 18);
+                ctx.closePath();
+                ctx.fill();
+
+                // شراع المركب
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.moveTo(boat.x + boat.length / 2, boat.y);
+                ctx.lineTo(boat.x + boat.length / 2, boat.y - 30);
+                ctx.lineTo(boat.x + boat.length / 2 + 20, boat.y - 10);
+                ctx.closePath();
+                ctx.fill();
+            });
+
+            // 3. البحر
+            ctx.fillStyle = isNight ? "#1b4965" : "#0984e3";
+            ctx.fillRect(0, 220, canvas.width, 330);
+
+            // 4. الشاطئ
+            ctx.fillStyle = "#ffeaa7";
+            ctx.beginPath();
+            ctx.moveTo(0, 210);
+            ctx.lineTo(210, 230);
+            ctx.lineTo(170, 550);
+            ctx.lineTo(0, 550);
+            ctx.closePath();
+            ctx.fill();
+
+            //
